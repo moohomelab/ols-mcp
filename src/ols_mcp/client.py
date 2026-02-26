@@ -1,8 +1,9 @@
 """HTTP client for OLS API communication."""
 
 import os
+from pathlib import Path
+
 import httpx
-from typing import Optional
 from dotenv import load_dotenv
 
 from .models import LLMRequest, LLMResponse
@@ -10,14 +11,50 @@ from .models import LLMRequest, LLMResponse
 # Load environment variables from .env file
 load_dotenv()
 
+# In-cluster SA token path
+SA_TOKEN_PATH = Path("/var/run/secrets/kubernetes.io/serviceaccount/token")
+
+# Default in-cluster OLS service URL (falls back to localhost for local dev)
+_DEFAULT_OLS_URL = (
+    "https://lightspeed-app-server.openshift-lightspeed.svc.cluster.local:8443"
+    if SA_TOKEN_PATH.exists()
+    else "http://localhost:8080"
+)
+
+
+def _get_api_token() -> str | None:
+    """Get API token from env var, falling back to SA token on cluster."""
+    token = os.getenv("OLS_API_TOKEN")
+    if token:
+        return token
+    if SA_TOKEN_PATH.exists():
+        return SA_TOKEN_PATH.read_text().strip()
+    return None
+
+
+def _get_verify_ssl() -> bool | str:
+    """Get SSL verification setting.
+
+    Supports:
+      - "true" / "false" for boolean toggle
+      - A file path to a CA cert bundle
+    """
+    value = os.getenv("OLS_VERIFY_SSL", "true")
+    if value.lower() == "false":
+        return False
+    if value.lower() == "true":
+        return True
+    # Treat as a path to a CA cert file
+    return value
+
 
 async def query_openshift_lightspeed(request: LLMRequest) -> LLMResponse:
     """Query the OpenShift LightSpeed API."""
     # Get configuration from environment
-    api_url = os.getenv("OLS_API_URL", "http://localhost:8080")
-    api_token = os.getenv("OLS_API_TOKEN")
+    api_url = os.getenv("OLS_API_URL", _DEFAULT_OLS_URL)
+    api_token = _get_api_token()
     timeout = float(os.getenv("OLS_TIMEOUT", "30.0"))
-    verify_ssl = os.getenv("OLS_VERIFY_SSL", "true").lower() == "true"
+    verify_ssl = _get_verify_ssl()
 
     # Build request URL
     url = f"{api_url.rstrip('/')}/v1/query"
