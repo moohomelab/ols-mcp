@@ -13,7 +13,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Create the FastMCP server instance
-mcp = FastMCP("openshift-lightspeed-mcp")
+# host/port are constructor params (used when transport=streamable-http)
+mcp = FastMCP("openshift-lightspeed-mcp", host="0.0.0.0", port=8000)
 
 
 @mcp.tool()
@@ -31,10 +32,7 @@ async def openshift_lightspeed(query: str, conversation_id: str | None = None) -
 def main():
     """Main entry point for the MCP server."""
     transport = os.getenv("MCP_TRANSPORT", "stdio")
-    if transport == "streamable-http":
-        mcp.run(transport="streamable-http", host="0.0.0.0", port=8000)
-    else:
-        mcp.run(transport="stdio")
+    mcp.run(transport=transport)
 
 
 if __name__ == "__main__":
